@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L.I Express - Rota Fixa v14.0</title>
+    <style>
+        :root {
+            --bg: #0b0e14; --card-bg: #151921; --accent: #2ecc71;
+            --accent-blue: #3498db; --text-main: #e6edf3; --text-dim: #8b949e; --border: #30363d;
+            --danger: #ff6b6b; --warning: #f39c12;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text-main); margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; }
+        .dashboard { background-color: var(--card-bg); width: 100%; max-width: 500px; border-radius: 12px; border: 1px solid var(--border); padding: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.5); }
+        .header { text-align: center; border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px; }
+        .header h1 { font-size: 1.4rem; margin: 0; color: var(--accent-blue); letter-spacing: 1px; }
+        
+        .stop-wrapper { margin-bottom: 12px; background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 12px; border-left: 4px solid var(--border); }
+        .stop-wrapper.origin { border-left-color: var(--accent-blue); background: rgba(52, 152, 219, 0.03); }
+        .stop-wrapper.success { border-left-color: var(--accent); }
+
+        .stop-header { display: flex; justify-content: space-between; font-size: 0.65rem; font-weight: bold; margin-bottom: 6px; }
+        .stop-input { background: transparent; border: none; color: #fff; width: 90%; font-size: 0.95rem; outline: none; font-weight: bold; }
+        .address-info { font-size: 0.65rem; color: var(--warning); margin-top: 5px; font-style: italic; }
+
+        .btn-add { background: transparent; color: var(--accent-blue); border: 1px dashed var(--accent-blue); padding: 12px; border-radius: 8px; width: 100%; cursor: pointer; font-weight: bold; margin: 10px 0; }
+        .btn-optimize { background: var(--accent); color: #000; border: none; padding: 14px; border-radius: 8px; width: 100%; cursor: pointer; font-weight: bold; margin-bottom: 15px; font-size: 0.85rem; }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .input-group label { display: block; font-size: 0.7rem; color: var(--text-dim); margin-bottom: 5px; font-weight: bold; }
+        .field { display: flex; background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 10px; align-items: center; }
+        .field input { background: transparent; border: none; color: #fff; width: 100%; text-align: right; font-weight: bold; outline: none; }
+        .field span { color: var(--text-dim); font-size: 0.8rem; margin-right: 5px; }
+
+        .result-panel { background: linear-gradient(135deg, #1e2a1e 0%, #0d1117 100%); border-radius: 12px; padding: 20px; border: 1px solid #23863644; text-align: center; margin-top: 20px; }
+        .total-value { font-size: 2.3rem; font-weight: 800; color: var(--accent); margin: 5px 0; }
+        .btn-copy { width: 100%; background: var(--accent-blue); color: white; border: none; padding: 15px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-remove { color: var(--danger); background: none; border: none; cursor: pointer; font-size: 0.7rem; }
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <div class="header">
+        <h1>L.I EXPRESS</h1>
+        <div style="font-size: 0.65rem; color: var(--text-dim);">CONTROLE DE ROTAS v14.0</div>
+    </div>
+
+    <div id="stops-container">
+        </div>
+    
+    <button class="btn-add" onclick="createStopUI()">+ Adicionar Próximo Destino</button>
+    <button id="optBtn" class="btn-optimize" onclick="optimizeRoute()" style="display:none;">⚡ ORGANIZAR MELHOR ROTA</button>
+
+    <div class="grid-2">
+        <div class="input-group">
+            <label>BASE FIXA</label>
+            <div class="field"><span>R$</span><input type="number" id="base" value="120" oninput="calc()"></div>
+        </div>
+        <div class="input-group">
+            <label>PEDÁGIO (IDA)</label>
+            <div class="field"><span>R$</span><input type="number" id="pedagio" value="0.00" oninput="calc()"></div>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <div class="input-group">
+            <label>KM (SÓ IDA)</label>
+            <div class="field"><input type="number" id="dist" value="0" readonly></div>
+        </div>
+        <div class="input-group">
+            <label>MULTIPLICADOR</label>
+            <div class="field"><input type="number" id="mult" value="1" step="0.1" oninput="calc()"></div>
+        </div>
+    </div>
+
+    <div class="result-panel">
+        <div class="total-value" id="res">R$ 0,00</div>
+        <div id="kmTotal" style="font-size: 0.75rem; color: var(--text-dim);">0.0 KM total (Ida/Volta)</div>
+        <button class="btn-copy" onclick="copyQuote()">📲 Copiar Orçamento</button>
+    </div>
+</div>
+
+<script>
+    let stopsData = []; 
+
+    // Inicialização segura
+    window.onload = () => {
+        createStopUI(true); // Cria Coleta
+        createStopUI(false); // Cria Entrega 1
+    };
+
+    function createStopUI(isOrigin = false) {
+        const id = Math.random().toString(36).substr(2, 9); // ID único real
+        const index = stopsData.length;
+        
+        stopsData.push({id: id, inputVal: '', lat: null, lon: null, name: '', verified: false});
+        
+        const container = document.getElementById('stops-container');
+        const div = document.createElement('div');
+        div.className = `stop-wrapper ${isOrigin ? 'origin' : ''}`;
+        div.id = `wrap-${id}`;
+        div.innerHTML = `
+            <div class="stop-header">
+                <span style="color:${isOrigin?'var(--accent-blue)':'var(--text-dim)'}">
+                    ${isOrigin ? '🚩 PONTO DE COLETA' : '📦 ENTREGA ' + index}
+                </span>
+                ${!isOrigin ? `<button class="btn-remove" onclick="removeStop('${id}')">Remover</button>` : ''}
+            </div>
+            <input type="text" class="stop-input" 
+                id="input-${id}"
+                placeholder="Cidade ou CEP..." 
+                onblur="handleSearch('${id}')" 
+                onkeydown="if(event.key==='Enter') { event.preventDefault(); handleSearch('${id}'); }">
+            <div class="address-info" id="info-${id}">Aguardando endereço...</div>
+        `;
+        container.appendChild(div);
+        updateButtons();
+    }
+
+    function removeStop(id) {
+        stopsData = stopsData.filter(s => s.id !== id);
+        const el = document.getElementById(`wrap-${id}`);
+        if(el) el.remove();
+        reindexLabels();
+        updateButtons();
+        calculateDistance();
+    }
+
+    function reindexLabels() {
+        const wrappers = document.querySelectorAll('.stop-wrapper');
+        wrappers.forEach((w, i) => {
+            const label = w.querySelector('.stop-header span');
+            if (i > 0) label.innerText = '📦 ENTREGA ' + i;
+        });
+    }
+
+    async function handleSearch(id) {
+        const inputEl = document.getElementById(`input-${id}`);
+        const val = inputEl.value.trim();
+        const info = document.getElementById(`info-${id}`);
+        const wrap = document.getElementById(`wrap-${id}`);
+        const stop = stopsData.find(s => s.id === id);
+
+        if (val.length < 3 || stop.inputVal === val) return;
+
+        info.innerText = "🔍 Localizando...";
+        info.style.color = "var(--warning)";
+
+        try {
+            // Busca específica para evitar cruzamento de dados
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&countrycodes=br&limit=1`);
+            const data = await res.json();
+            
+            if (data && data.length > 0) {
+                const result = data[0];
+                stop.lat = parseFloat(result.lat);
+                stop.lon = parseFloat(result.lon);
+                stop.inputVal = val;
+                stop.name = result.display_name.split(',')[0];
+                stop.verified = true;
+                
+                info.innerText = "✅ " + result.display_name.split(',').slice(0,2).join(',');
+                info.style.color = "var(--accent)";
+                wrap.classList.add('success');
+                
+                calculateDistance();
+            } else {
+                stop.verified = false;
+                info.innerText = "❌ Endereço não localizado.";
+                info.style.color = "var(--danger)";
+                wrap.classList.remove('success');
+            }
+        } catch (e) { 
+            info.innerText = "⚠️ Erro de conexão.";
+        }
+    }
+
+    function updateButtons() {
+        const btn = document.getElementById('optBtn');
+        if(btn) btn.style.display = (stopsData.length > 2) ? 'block' : 'none';
+    }
+
+    // Otimização focada apenas em quem está VERIFICADO
+    function optimizeRoute() {
+        const verifiedStops = stopsData.filter(s => s.verified);
+        if (verifiedStops.length < 3) return;
+
+        let unvisited = verifiedStops.slice(1);
+        let optimized = [verifiedStops[0]];
+        
+        while (unvisited.length > 0) {
+            let last = optimized[optimized.length - 1];
+            let closestIdx = 0;
+            let minDist = Infinity;
+            
+            for (let i = 0; i < unvisited.length; i++) {
+                let d = Math.sqrt(Math.pow(last.lat - unvisited[i].lat, 2) + Math.pow(last.lon - unvisited[i].lon, 2));
+                if (d < minDist) {
+                    minDist = d;
+                    closestIdx = i;
+                }
+            }
+            optimized.push(unvisited.splice(closestIdx, 1)[0]);
+        }
+        
+        // Atualiza a lista global e limpa a tela para reordenar
+        stopsData = optimized;
+        const container = document.getElementById('stops-container');
+        container.innerHTML = '';
+        
+        stopsData.forEach((s, i) => {
+            const isOrig = (i === 0);
+            const div = document.createElement('div');
+            div.className = `stop-wrapper ${isOrig ? 'origin' : ''} success`;
+            div.id = `wrap-${s.id}`;
+            div.innerHTML = `
+                <div class="stop-header">
+                    <span style="color:${isOrig?'var(--accent-blue)':'var(--text-dim)'}">${isOrig ? '🚩 PONTO DE COLETA' : '📦 ENTREGA ' + i}</span>
+                    ${!isOrig ? `<button class="btn-remove" onclick="removeStop('${s.id}')">Remover</button>` : ''}
+                </div>
+                <input type="text" class="stop-input" id="input-${s.id}" value="${s.inputVal}" onblur="handleSearch('${s.id}')">
+                <div class="address-info" id="info-${s.id}" style="color:var(--accent)">✅ ${s.name}</div>
+            `;
+            container.appendChild(div);
+        });
+        calculateDistance();
+    }
+
+    async function calculateDistance() {
+        const valid = stopsData.filter(s => s.verified);
+        if (valid.length < 2) return;
+
+        const coords = valid.map(s => `${s.lon},${s.lat}`).join(';');
+        try {
+            const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=false`);
+            const data = await res.json();
+            if (data.code === "Ok") {
+                document.getElementById('dist').value = (data.routes[0].distance / 1000).toFixed(1);
+                calc();
+            }
+        } catch (e) {}
+    }
+
+    function calc() {
+        const base = parseFloat(document.getElementById('base').value) || 0;
+        const dist = parseFloat(document.getElementById('dist').value) || 0;
+        const ped = parseFloat(document.getElementById('pedagio').value) || 0;
+        const mult = parseFloat(document.getElementById('mult').value) || 1;
+        const vkm = (dist >= 300) ? 1.5 : 2.0;
+
+        let total = base + (((dist * vkm) + ped) * mult) * 2;
+        document.getElementById('res').innerText = total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+        document.getElementById('kmTotal').innerText = `${(dist * 2).toFixed(1)} KM total (Ida/Volta)`;
+    }
+
+    function copyQuote() {
+        const total = document.getElementById('res').innerText;
+        const km = document.getElementById('dist').value;
+        const rota = stopsData.map((s, i) => `${i==0?'🚩 Coleta:':'📦 Entrega '+i+':'} ${s.inputVal}`).join('\n');
+        const msg = `🚛 *L.I EXPRESS - ORÇAMENTO*\n━━━━━━━━━━━━━━━━━━━━\n${rota}\n\n📏 *Distância Ida:* ${km}km\n🔄 *Percurso Total:* ${(km*2).toFixed(1)}km\n💰 *VALOR TOTAL: ${total}*\n━━━━━━━━━━━━━━━━━━━━`;
+        navigator.clipboard.writeText(msg).then(() => alert("Copiado!"));
+    }
+</script>
+</body>
+</html>
